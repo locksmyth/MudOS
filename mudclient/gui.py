@@ -6,7 +6,7 @@ import threading
 import tkinter as tk
 from tkinter import messagebox, simpledialog
 
-from .ansi import sanitize_for_terminal
+from .ansi import sanitize_for_terminal, split_ansi_segments
 from .commands import parse_local_command, validate_host, validate_port
 from .config import ConfigStore
 from .logging_utils import SessionLogger
@@ -60,8 +60,11 @@ class MudGui:
         tk.Button(top, text="Disconnect", command=lambda: self._submit(self.disconnect())).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Reconnect", command=lambda: self._submit(self.reconnect())).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Profiles", command=self.show_profiles).pack(side=tk.LEFT, padx=3)
+        tk.Button(top, text="Dark Mode", command=self.toggle_dark_mode).pack(side=tk.LEFT, padx=3)
 
         self.output = tk.Text(self.root, wrap=tk.WORD, undo=False)
+        self.dark_mode = True
+        self._configure_ansi_tags()
         self.output.pack(fill=tk.BOTH, expand=True, padx=8)
 
         bottom = tk.Frame(self.root)
@@ -71,7 +74,36 @@ class MudGui:
         self.input.bind("<Return>", lambda _e: self.on_enter())
         tk.Button(bottom, text="Send", command=self.on_enter).pack(side=tk.LEFT, padx=5)
 
-        tk.Label(self.root, textvariable=self.status_var, anchor="w").pack(fill=tk.X, padx=8, pady=(0, 8))
+        self.status_label = tk.Label(self.root, textvariable=self.status_var, anchor="w")
+        self.status_label.pack(fill=tk.X, padx=8, pady=(0, 8))
+        self._apply_theme()
+
+
+    def _configure_ansi_tags(self) -> None:
+        colors = {
+            "30": "#000000", "31": "#ff5f5f", "32": "#5fff5f", "33": "#ffd75f",
+            "34": "#5f87ff", "35": "#d787ff", "36": "#5fffff", "37": "#e4e4e4",
+            "90": "#808080", "91": "#ff8080", "92": "#80ff80", "93": "#ffe680",
+            "94": "#80aaff", "95": "#e0a0ff", "96": "#80ffff", "97": "#ffffff",
+        }
+        for code, color in colors.items():
+            self.output.tag_configure(f"ansi_{code}", foreground=color)
+
+    def _apply_theme(self) -> None:
+        if self.dark_mode:
+            bg, fg = "#111111", "#f0f0f0"
+            input_bg, input_fg = "#1b1b1b", "#f0f0f0"
+        else:
+            bg, fg = "#ffffff", "#111111"
+            input_bg, input_fg = "#ffffff", "#111111"
+        self.root.configure(bg=bg)
+        self.output.configure(bg=bg, fg=fg, insertbackground=fg)
+        self.input.configure(bg=input_bg, fg=input_fg, insertbackground=input_fg)
+        self.status_label.configure(bg=bg, fg=fg)
+
+    def toggle_dark_mode(self) -> None:
+        self.dark_mode = not self.dark_mode
+        self._apply_theme()
 
     def _start_loop_thread(self) -> None:
         def run_loop() -> None:
@@ -89,7 +121,12 @@ class MudGui:
             while True:
                 kind, text = self.queue.get_nowait()
                 if kind == "out":
-                    self.output.insert(tk.END, text + "\n")
+                    for segment, style in split_ansi_segments(text):
+                        if style:
+                            self.output.insert(tk.END, segment, style)
+                        else:
+                            self.output.insert(tk.END, segment)
+                    self.output.insert(tk.END, "\n")
                     self.output.see(tk.END)
                 elif kind == "status":
                     self.status_var.set(text)
