@@ -10,6 +10,7 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import HSplit, Layout, Window
+from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
 from prompt_toolkit.layout.dimension import D
 
@@ -57,8 +58,8 @@ class MudClient:
 
         return kb
 
-    def _render_output(self) -> str:
-        return "\n".join(self.output_lines[-5000:])
+    def _render_output(self) -> ANSI:
+        return ANSI("\n".join(self.output_lines[-5000:]))
 
     def _append_output(self, text: str) -> None:
         self.output_lines.extend(text.splitlines() or [text])
