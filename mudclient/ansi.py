@@ -3,17 +3,24 @@ from __future__ import annotations
 import re
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-UNSAFE_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+UNSAFE_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1a\x1c-\x1f\x7f]")
 ANSI_SGR_RE = re.compile(r"\x1b\[([0-9;]*)m")
+BARE_SGR_RE = re.compile(r"(?<!\x1b)\[([0-9;]*)m")
 
 
 def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text)
 
 
+def normalize_ansi_sequences(text: str) -> str:
+    """Convert bare SGR markers like ``[31m`` into real ANSI escapes."""
+    return BARE_SGR_RE.sub(lambda m: f"\x1b[{m.group(1)}m", text)
+
+
 def sanitize_for_terminal(text: str) -> str:
     # Keep tabs/newlines/carriage returns, remove most other control chars.
-    return UNSAFE_RE.sub("", text)
+    # Some MUD servers omit the ESC byte for SGR sequences (e.g. "[31m").
+    return UNSAFE_RE.sub("", normalize_ansi_sequences(text))
 
 
 def split_ansi_segments(text: str) -> list[tuple[str, str | None]]:

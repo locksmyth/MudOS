@@ -1,4 +1,4 @@
-from mudclient.ansi import strip_ansi
+from mudclient.ansi import sanitize_for_terminal, strip_ansi
 from mudclient.commands import parse_local_command, validate_host, validate_port
 
 
@@ -21,3 +21,9 @@ def test_validation():
 def test_strip_ansi():
     raw = '\x1b[31mDanger\x1b[0m'
     assert strip_ansi(raw) == 'Danger'
+
+
+def test_sanitize_bare_sgr_sequences():
+    raw = "[1m[36mTown Square[0m"
+    normalized = sanitize_for_terminal(raw)
+    assert normalized == "\x1b[1m\x1b[36mTown Square\x1b[0m"
