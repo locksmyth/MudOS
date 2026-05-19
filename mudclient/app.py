@@ -19,6 +19,7 @@ from .config import ClientConfig, ConfigStore
 from .logging_utils import SessionLogger
 from .profiles import Profile, ProfileStore
 from .telnet_connection import ConnectionParams, TelnetConnection
+from .gui import run_gui
 
 
 class ConnState(str, Enum):
@@ -188,18 +189,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--port", type=int)
     p.add_argument("--profile")
     p.add_argument("--encoding", default="utf-8")
+    p.add_argument("--terminal", action="store_true", help="Use terminal UI instead of GUI window")
     return p
 
 
-async def _main_async() -> None:
-    args = build_parser().parse_args()
-    client = MudClient(args)
-    await client.run()
-
-
 def main() -> None:
+    args = build_parser().parse_args()
+    if not args.terminal:
+        run_gui(host=args.host, port=args.port, profile=args.profile, encoding=args.encoding)
+        return
     try:
-        asyncio.run(_main_async())
+        client = MudClient(args)
+        asyncio.run(client.run())
     except KeyboardInterrupt:
         pass
 

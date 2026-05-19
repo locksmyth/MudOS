@@ -1,19 +1,26 @@
-# Python Terminal MUD Client
+# Python MUD Client (GUI + Terminal)
 
-Async Telnet MUD client for Python 3.11+ using `telnetlib3` and `prompt_toolkit`.
+Async Telnet MUD client for Python 3.11+ using `telnetlib3`.
 
 ## Installation
 
 ```bash
 python -m venv .venv
-. .venv/Scripts/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
 pip install -e .[dev]
 ```
 
 ## Run
 
+### GUI window (default)
 ```bash
 python -m mudclient --host example.com --port 4000
+```
+
+### Terminal UI mode
+```bash
+python -m mudclient --terminal --host example.com --port 4000
 ```
 
 Arguments:
@@ -21,13 +28,13 @@ Arguments:
 - `--port`
 - `--profile`
 - `--encoding`
+- `--terminal` (force prompt_toolkit terminal mode)
 
-If host/port are omitted, the app prompts interactively.
+If host/port are omitted, the client prompts (terminal mode) or lets you enter fields (GUI mode).
 
 ## Profiles
 
-Profiles are saved as JSON in the user config directory (`AppData/Local/mudclient` on Windows).
-Each profile includes name, host, port, encoding, notes, and optional auto-login command list.
+Profiles are stored in JSON under user config dir (`AppData/Local/mudclient` on Windows).
 
 ## Slash Commands
 
@@ -45,25 +52,14 @@ Each profile includes name, host, port, encoding, notes, and optional auto-login
 - `/log start`
 - `/log stop`
 
-Normal commands are sent to the MUD unchanged unless they begin with a recognized slash command.
+## ANSI and compatibility
 
-## ANSI and Output Safety
-
-- ANSI colors from servers are preserved in terminal output where supported.
-- Session logs strip ANSI by default.
-- Basic control-character sanitization is applied to reduce obvious terminal escape abuse.
-
-## Compatibility
-
+- Incoming ANSI colors are preserved in live output where supported.
+- Logs strip ANSI by default.
 - Python 3.11+
-- Works as a local terminal client on Windows, Linux, and macOS.
 
 ## Troubleshooting
 
-- Connection errors: verify host/port and firewall settings.
-- Garbled text: try `/set encoding cp1252` (or server-specific encoding).
-- If disconnected, use `/reconnect`.
-
-## Trigger Safety Note
-
-Triggers can automatically send commands. Some MUDs treat automation as botting; configure and use cautiously.
+- Connection failures: verify host/port/firewall.
+- Garbled text: try `/set encoding cp1252` or server-specific encoding.
+- Trigger automation may violate some MUD rules; use cautiously.
