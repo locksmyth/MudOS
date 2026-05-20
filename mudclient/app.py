@@ -100,7 +100,7 @@ class MudClient:
 
     async def _run_local_command(self, name: str, args: list[str]) -> None:
         if name == "help":
-            self._append_output("/connect host port | /disconnect | /reconnect | /quit | /clear | /profiles | /saveprofile name | /loadprofile name | /deleteprofile name | /set key value | /log start|stop")
+            self._append_output("/connect host port | /disconnect | /reconnect | /quit | /clear | /profiles | /saveprofile name [host port] | /loadprofile name | /deleteprofile name | /set key value | /log start|stop")
         elif name == "connect" and len(args) >= 2:
             await self.connect(args[0], int(args[1]))
         elif name == "disconnect":
@@ -117,12 +117,28 @@ class MudClient:
             for p in self.profile_store.list_profiles():
                 self._append_output(f"{p.name}: {p.host}:{p.port} ({p.encoding})")
         elif name == "saveprofile" and args:
-            if not self.connection.params:
-                self._append_output("[No active connection]")
+            profile_name = args[0]
+            if len(args) >= 3:
+                host = args[1]
+                try:
+                    port = int(args[2])
+                except ValueError:
+                    self._append_output("[Invalid port]")
+                    return
+                if not validate_host(host) or not validate_port(port):
+                    self._append_output("[Invalid host or port]")
+                    return
+                encoding = self.connection.params.encoding if self.connection.params else self.config.encoding
+            elif self.connection.params:
+                host = self.connection.params.host
+                port = self.connection.params.port
+                encoding = self.connection.params.encoding
+            else:
+                self._append_output("[Usage: /saveprofile name host port]")
                 return
-            p = Profile(name=args[0], host=self.connection.params.host, port=self.connection.params.port, encoding=self.connection.params.encoding)
+            p = Profile(name=profile_name, host=host, port=port, encoding=encoding)
             self.profile_store.save_profile(p)
-            self._append_output(f"[Saved profile {args[0]}]")
+            self._append_output(f"[Saved profile {profile_name}]")
         elif name == "loadprofile" and args:
             p = self.profile_store.get(args[0])
             if not p:
