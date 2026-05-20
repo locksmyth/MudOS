@@ -59,6 +59,9 @@ class MudGui:
         tk.Button(top, text="Connect", command=lambda: self._submit(self.connect())).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Disconnect", command=lambda: self._submit(self.disconnect())).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Reconnect", command=lambda: self._submit(self.reconnect())).pack(side=tk.LEFT, padx=3)
+        tk.Button(top, text="Save Profile", command=self.save_profile_from_fields).pack(side=tk.LEFT, padx=3)
+        tk.Button(top, text="Load Profile", command=self.load_profile_from_field).pack(side=tk.LEFT, padx=3)
+        tk.Button(top, text="Delete Profile", command=self.delete_profile_from_field).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Profiles", command=self.show_profiles).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Dark Mode", command=self.toggle_dark_mode).pack(side=tk.LEFT, padx=3)
 
@@ -233,6 +236,38 @@ class MudGui:
                 self.logger.stop(); self.queue.put(("out", "[Logging stopped]"))
         else:
             self.queue.put(("out", "[Unknown local command, try /help]"))
+
+
+    def save_profile_from_fields(self) -> None:
+        name = self.profile_var.get().strip()
+        if not name:
+            messagebox.showerror("Save Profile", "Enter a profile name first")
+            return
+        host = self.host_var.get().strip()
+        try:
+            port = int(self.port_var.get().strip())
+        except ValueError:
+            messagebox.showerror("Save Profile", "Port must be a number")
+            return
+        if not validate_host(host) or not validate_port(port):
+            messagebox.showerror("Save Profile", "Host or port is invalid")
+            return
+        self.profile_store.save_profile(Profile(name=name, host=host, port=port, encoding=self.encoding))
+        self.queue.put(("out", f"[Saved profile {name}]"))
+
+    def load_profile_from_field(self) -> None:
+        name = self.profile_var.get().strip()
+        if not name:
+            messagebox.showerror("Load Profile", "Enter a profile name first")
+            return
+        self._submit(self.run_command("loadprofile", [name]))
+
+    def delete_profile_from_field(self) -> None:
+        name = self.profile_var.get().strip()
+        if not name:
+            messagebox.showerror("Delete Profile", "Enter a profile name first")
+            return
+        self._submit(self.run_command("deleteprofile", [name]))
 
     def show_profiles(self) -> None:
         profiles = self.profile_store.list_profiles()

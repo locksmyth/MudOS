@@ -36,6 +36,9 @@ If host/port are omitted, the client prompts (terminal mode) or lets you enter f
 
 Profiles are stored in JSON under user config dir (`AppData/Local/mudclient` on Windows).
 
+In the GUI, use the **Save Profile**, **Load Profile**, and **Delete Profile** buttons next to the Profile field.
+In terminal mode, `/saveprofile` can save the active connection or take explicit host/port: `/saveprofile name host port`.
+
 ## Slash Commands
 
 - `/help`
@@ -45,7 +48,7 @@ Profiles are stored in JSON under user config dir (`AppData/Local/mudclient` on 
 - `/quit`
 - `/clear`
 - `/profiles`
-- `/saveprofile name`
+- `/saveprofile name [host port]`
 - `/loadprofile name`
 - `/deleteprofile name`
 - `/set key value`
