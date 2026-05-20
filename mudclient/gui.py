@@ -52,17 +52,14 @@ class MudGui:
     def _build_ui(self) -> None:
         top = tk.Frame(self.root)
         top.pack(fill=tk.X, padx=8, pady=8)
-        for lbl, var, w in (("Host", self.host_var, 28), ("Port", self.port_var, 8), ("Profile", self.profile_var, 16)):
+        for lbl, var, w in (("Host", self.host_var, 28), ("Port", self.port_var, 8)):
             tk.Label(top, text=lbl).pack(side=tk.LEFT)
             tk.Entry(top, textvariable=var, width=w).pack(side=tk.LEFT, padx=4)
 
         tk.Button(top, text="Connect", command=lambda: self._submit(self.connect())).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Disconnect", command=lambda: self._submit(self.disconnect())).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Reconnect", command=lambda: self._submit(self.reconnect())).pack(side=tk.LEFT, padx=3)
-        tk.Button(top, text="Save Profile", command=self.save_profile_from_fields).pack(side=tk.LEFT, padx=3)
-        tk.Button(top, text="Load Profile", command=self.load_profile_from_field).pack(side=tk.LEFT, padx=3)
-        tk.Button(top, text="Delete Profile", command=self.delete_profile_from_field).pack(side=tk.LEFT, padx=3)
-        tk.Button(top, text="Profiles", command=self.show_profiles).pack(side=tk.LEFT, padx=3)
+        tk.Button(top, text="Profiles", command=self.open_profiles_dialog).pack(side=tk.LEFT, padx=3)
         tk.Button(top, text="Dark Mode", command=self.toggle_dark_mode).pack(side=tk.LEFT, padx=3)
 
         self.output = tk.Text(self.root, wrap=tk.WORD, undo=False)
@@ -238,43 +235,120 @@ class MudGui:
             self.queue.put(("out", "[Unknown local command, try /help]"))
 
 
-    def save_profile_from_fields(self) -> None:
-        name = self.profile_var.get().strip()
-        if not name:
-            messagebox.showerror("Save Profile", "Enter a profile name first")
-            return
-        host = self.host_var.get().strip()
-        try:
-            port = int(self.port_var.get().strip())
-        except ValueError:
-            messagebox.showerror("Save Profile", "Port must be a number")
-            return
-        if not validate_host(host) or not validate_port(port):
-            messagebox.showerror("Save Profile", "Host or port is invalid")
-            return
-        self.profile_store.save_profile(Profile(name=name, host=host, port=port, encoding=self.encoding))
-        self.queue.put(("out", f"[Saved profile {name}]"))
+    def open_profiles_dialog(self) -> None:
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Profiles")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.geometry("520x320")
 
-    def load_profile_from_field(self) -> None:
-        name = self.profile_var.get().strip()
-        if not name:
-            messagebox.showerror("Load Profile", "Enter a profile name first")
-            return
-        self._submit(self.run_command("loadprofile", [name]))
+        main = tk.Frame(dialog)
+        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-    def delete_profile_from_field(self) -> None:
-        name = self.profile_var.get().strip()
-        if not name:
-            messagebox.showerror("Delete Profile", "Enter a profile name first")
-            return
-        self._submit(self.run_command("deleteprofile", [name]))
+        list_frame = tk.Frame(main)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+        profile_list = tk.Listbox(list_frame)
+        profile_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar = tk.Scrollbar(list_frame, orient=tk.VERTICAL, command=profile_list.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        profile_list.configure(yscrollcommand=scrollbar.set)
 
-    def show_profiles(self) -> None:
-        profiles = self.profile_store.list_profiles()
-        if not profiles:
-            messagebox.showinfo("Profiles", "No profiles saved")
-            return
-        messagebox.showinfo("Profiles", "\n".join(f"{p.name}: {p.host}:{p.port}" for p in profiles))
+        details_var = tk.StringVar(value="Select a profile")
+        tk.Label(main, textvariable=details_var, anchor="w").pack(fill=tk.X, pady=(8, 8))
+
+        button_bar = tk.Frame(main)
+        button_bar.pack(fill=tk.X)
+
+        def refresh(selected_name: str | None = None) -> None:
+            profiles = self.profile_store.list_profiles()
+            profile_list.delete(0, tk.END)
+            for p in profiles:
+                profile_list.insert(tk.END, p.name)
+            if selected_name:
+                names = [p.name for p in profiles]
+                if selected_name in names:
+                    idx = names.index(selected_name)
+                    profile_list.selection_set(idx)
+                    profile_list.activate(idx)
+                    profile_list.see(idx)
+                    update_details()
+
+        def selected_profile() -> Profile | None:
+            selected = profile_list.curselection()
+            if not selected:
+                return None
+            name = profile_list.get(selected[0])
+            return self.profile_store.get(name)
+
+        def update_details(_event: object | None = None) -> None:
+            p = selected_profile()
+            if not p:
+                details_var.set("Select a profile")
+                return
+            details_var.set(f"{p.name}: {p.host}:{p.port} ({p.encoding})")
+
+        def save_current() -> None:
+            host = self.host_var.get().strip()
+            try:
+                port = int(self.port_var.get().strip())
+            except ValueError:
+                messagebox.showerror("Save Profile", "Port must be a number", parent=dialog)
+                return
+            if not validate_host(host) or not validate_port(port):
+                messagebox.showerror("Save Profile", "Host or port is invalid", parent=dialog)
+                return
+
+            default_name = ""
+            current = selected_profile()
+            if current:
+                default_name = current.name
+            name = simpledialog.askstring("Save Profile", "Profile name:", initialvalue=default_name, parent=dialog)
+            if not name:
+                return
+            name = name.strip()
+            if not name:
+                messagebox.showerror("Save Profile", "Profile name cannot be empty", parent=dialog)
+                return
+            self.profile_store.save_profile(Profile(name=name, host=host, port=port, encoding=self.encoding))
+            self.queue.put(("out", f"[Saved profile {name}]"))
+            refresh(name)
+
+        def load_selected() -> None:
+            p = selected_profile()
+            if not p:
+                messagebox.showerror("Load Profile", "Select a profile first", parent=dialog)
+                return
+            self.host_var.set(p.host)
+            self.port_var.set(str(p.port))
+            self.encoding = p.encoding
+            self.queue.put(("out", f"[Loaded profile {p.name}]"))
+
+        def connect_selected() -> None:
+            load_selected()
+            self._submit(self.connect())
+
+        def delete_selected() -> None:
+            p = selected_profile()
+            if not p:
+                messagebox.showerror("Delete Profile", "Select a profile first", parent=dialog)
+                return
+            if not messagebox.askyesno("Delete Profile", f"Delete profile '{p.name}'?", parent=dialog):
+                return
+            self.profile_store.delete_profile(p.name)
+            self.queue.put(("out", f"[Deleted profile {p.name}]"))
+            refresh()
+
+        tk.Button(button_bar, text="Save Current", command=save_current).pack(side=tk.LEFT, padx=3)
+        tk.Button(button_bar, text="Load", command=load_selected).pack(side=tk.LEFT, padx=3)
+        tk.Button(button_bar, text="Load + Connect", command=connect_selected).pack(side=tk.LEFT, padx=3)
+        tk.Button(button_bar, text="Delete", command=delete_selected).pack(side=tk.LEFT, padx=3)
+        tk.Button(button_bar, text="Close", command=dialog.destroy).pack(side=tk.RIGHT, padx=3)
+
+        profile_list.bind("<<ListboxSelect>>", update_details)
+        profile_list.bind("<Double-1>", lambda _e: load_selected())
+
+        refresh()
+
 
     def on_quit(self) -> None:
         self._submit(self.disconnect())
