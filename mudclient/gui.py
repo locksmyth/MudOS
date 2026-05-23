@@ -31,6 +31,7 @@ class MudGui:
         self.port_var = tk.StringVar(value=str(port or ""))
         self.profile_var = tk.StringVar(value=profile or "")
         self.status_var = tk.StringVar(value="disconnected")
+        self.gmcp_connected = False
 
         self.loop = asyncio.new_event_loop()
         self.queue: queue.Queue[tuple[str, str]] = queue.Queue()
@@ -83,6 +84,14 @@ class MudGui:
 
         self.status_label = tk.Label(self.root, textvariable=self.status_var, anchor="w")
         self.status_label.pack(fill=tk.X, padx=8, pady=(0, 8))
+
+        gmcp_row = tk.Frame(self.root)
+        gmcp_row.pack(fill=tk.X, padx=8, pady=(0, 8), anchor="w")
+        tk.Label(gmcp_row, text="GMCP").pack(side=tk.LEFT)
+        self.gmcp_indicator = tk.Canvas(gmcp_row, width=14, height=14, highlightthickness=0, bd=0)
+        self.gmcp_indicator.pack(side=tk.LEFT, padx=(6, 0))
+        self.gmcp_light = self.gmcp_indicator.create_oval(2, 2, 12, 12, fill="#6b6b6b", outline="#4f4f4f")
+
         self._apply_theme()
 
 
@@ -109,6 +118,16 @@ class MudGui:
         self.room_output.configure(bg=input_bg, fg=input_fg, insertbackground=input_fg)
         self.input.configure(bg=input_bg, fg=input_fg, insertbackground=input_fg)
         self.status_label.configure(bg=bg, fg=fg)
+        self.gmcp_indicator.configure(bg=bg)
+        self._set_gmcp_indicator(self.gmcp_connected)
+
+    def _set_gmcp_indicator(self, connected: bool) -> None:
+        self.gmcp_connected = connected
+        if connected:
+            fill, outline = "#2ecc71", "#1e8449"
+        else:
+            fill, outline = "#6b6b6b", "#4f4f4f"
+        self.gmcp_indicator.itemconfig(self.gmcp_light, fill=fill, outline=outline)
 
     def toggle_dark_mode(self) -> None:
         self.dark_mode = not self.dark_mode
@@ -176,6 +195,8 @@ class MudGui:
         return "\n".join(lines) if lines else None
 
     async def _on_gmcp(self, package: str, data: Any) -> None:
+        if not self.gmcp_connected:
+            self.root.after(0, lambda: self._set_gmcp_indicator(True))
         if package.lower() != "room.info":
             return
         room_text = self._format_room_info(data)
@@ -198,6 +219,7 @@ class MudGui:
             return
 
         await self.disconnect()
+        self.root.after(0, lambda: self._set_gmcp_indicator(False))
         self.queue.put(("status", "connecting"))
         try:
             await self.conn.connect(ConnectionParams(host=host, port=port, encoding=self.encoding), self._on_data, self._on_disconnect, self._on_gmcp)
@@ -209,6 +231,7 @@ class MudGui:
 
     async def disconnect(self) -> None:
         await self.conn.disconnect()
+        self.root.after(0, lambda: self._set_gmcp_indicator(False))
         self.queue.put(("status", "disconnected"))
 
     async def reconnect(self) -> None:
