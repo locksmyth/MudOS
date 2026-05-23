@@ -4,6 +4,7 @@ import asyncio
 import queue
 import threading
 import tkinter as tk
+from typing import Any
 from tkinter import messagebox, simpledialog
 
 from .ansi import sanitize_for_terminal, split_ansi_segments
@@ -67,6 +68,12 @@ class MudGui:
         self._configure_ansi_tags()
         self.output.pack(fill=tk.BOTH, expand=True, padx=8)
 
+        self.room_label = tk.Label(self.root, text="Room", anchor="w")
+        self.room_label.pack(fill=tk.X, padx=8, pady=(6, 0))
+        self.room_output = tk.Text(self.root, wrap=tk.WORD, height=6, undo=False)
+        self.room_output.pack(fill=tk.X, padx=8)
+        self._update_room_description("No room data yet")
+
         bottom = tk.Frame(self.root)
         bottom.pack(fill=tk.X, padx=8, pady=8)
         self.input = tk.Entry(bottom)
@@ -98,6 +105,8 @@ class MudGui:
             input_bg, input_fg = "#ffffff", "#111111"
         self.root.configure(bg=bg)
         self.output.configure(bg=bg, fg=fg, insertbackground=fg)
+        self.room_label.configure(bg=bg, fg=fg)
+        self.room_output.configure(bg=input_bg, fg=input_fg, insertbackground=input_fg)
         self.input.configure(bg=input_bg, fg=input_fg, insertbackground=input_fg)
         self.status_label.configure(bg=bg, fg=fg)
 
@@ -130,6 +139,8 @@ class MudGui:
                     self.output.see(tk.END)
                 elif kind == "status":
                     self.status_var.set(text)
+                elif kind == "room":
+                    self._update_room_description(text)
         except queue.Empty:
             pass
         self.root.after(50, self._process_queue)
@@ -142,6 +153,34 @@ class MudGui:
             for trig in self.config.triggers:
                 if trig.enabled and trig.pattern in line and trig.response:
                     await self.conn.send_line(trig.response)
+
+    def _update_room_description(self, text: str) -> None:
+        self.room_output.configure(state=tk.NORMAL)
+        self.room_output.delete("1.0", tk.END)
+        self.room_output.insert(tk.END, text)
+        self.room_output.configure(state=tk.DISABLED)
+
+    def _format_room_info(self, data: Any) -> str | None:
+        if not isinstance(data, dict):
+            return None
+        name = str(data.get("name") or "").strip()
+        area = str(data.get("area") or "").strip()
+        desc = str(data.get("description") or data.get("desc") or "").strip()
+        lines: list[str] = []
+        if name:
+            lines.append(name)
+        if area:
+            lines.append(f"Area: {area}")
+        if desc:
+            lines.extend(["", desc])
+        return "\n".join(lines) if lines else None
+
+    async def _on_gmcp(self, package: str, data: Any) -> None:
+        if package.lower() != "room.info":
+            return
+        room_text = self._format_room_info(data)
+        if room_text:
+            self.queue.put(("room", room_text))
 
     async def _on_disconnect(self) -> None:
         self.queue.put(("status", "disconnected"))
@@ -161,7 +200,7 @@ class MudGui:
         await self.disconnect()
         self.queue.put(("status", "connecting"))
         try:
-            await self.conn.connect(ConnectionParams(host=host, port=port, encoding=self.encoding), self._on_data, self._on_disconnect)
+            await self.conn.connect(ConnectionParams(host=host, port=port, encoding=self.encoding), self._on_data, self._on_disconnect, self._on_gmcp)
             self.queue.put(("status", f"connected {host}:{port}"))
             self.queue.put(("out", f"[Connected to {host}:{port}]"))
         except Exception as exc:

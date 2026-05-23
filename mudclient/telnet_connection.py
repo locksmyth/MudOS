@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 import telnetlib3
+from telnetlib3.telopt import GMCP
 
 
 @dataclass
@@ -21,7 +23,13 @@ class TelnetConnection:
         self.read_task: asyncio.Task[None] | None = None
         self.params: ConnectionParams | None = None
 
-    async def connect(self, params: ConnectionParams, on_data: Callable[[str], Awaitable[None]], on_disconnect: Callable[[], Awaitable[None]]) -> None:
+    async def connect(
+        self,
+        params: ConnectionParams,
+        on_data: Callable[[str], Awaitable[None]],
+        on_disconnect: Callable[[], Awaitable[None]],
+        on_gmcp: Callable[[str, Any], Awaitable[None]] | None = None,
+    ) -> None:
         self.params = params
         self.reader, self.writer = await telnetlib3.open_connection(
             host=params.host,
@@ -30,6 +38,12 @@ class TelnetConnection:
             connect_minwait=0.05,
             shell=None,
         )
+        if self.writer and on_gmcp:
+            def gmcp_callback(package: str, data: Any) -> None:
+                asyncio.create_task(on_gmcp(package, data))
+
+            self.writer.set_ext_callback(GMCP, gmcp_callback)
+
         self.read_task = asyncio.create_task(self._read_loop(on_data, on_disconnect))
 
     async def _read_loop(self, on_data: Callable[[str], Awaitable[None]], on_disconnect: Callable[[], Awaitable[None]]) -> None:
@@ -61,5 +75,3 @@ class TelnetConnection:
         self.reader = None
         self.writer = None
         self.read_task = None
-
-import contextlib

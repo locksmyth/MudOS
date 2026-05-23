@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from enum import Enum
+from typing import Any
 
 from prompt_toolkit import Application
 from prompt_toolkit.buffer import Buffer
@@ -76,6 +77,28 @@ class MudClient:
         for trig in self.config.triggers:
             if trig.enabled and trig.pattern in line and trig.response:
                 await self.connection.send_line(trig.response)
+
+    def _format_room_info(self, data: Any) -> str | None:
+        if not isinstance(data, dict):
+            return None
+        name = str(data.get("name") or "").strip()
+        area = str(data.get("area") or "").strip()
+        desc = str(data.get("description") or data.get("desc") or "").strip()
+        lines: list[str] = []
+        if name:
+            lines.append(name)
+        if area:
+            lines.append(f"Area: {area}")
+        if desc:
+            lines.extend(["", desc])
+        return "\n".join(lines) if lines else None
+
+    async def _on_gmcp(self, package: str, data: Any) -> None:
+        if package.lower() != "room.info":
+            return
+        room_text = self._format_room_info(data)
+        if room_text:
+            self._append_output(f"[Room]\n{room_text}")
 
     async def _on_disconnect(self) -> None:
         self.state = ConnState.DISCONNECTED
@@ -170,7 +193,7 @@ class MudClient:
         self.state = ConnState.CONNECTING
         self.status = "connecting"
         try:
-            await self.connection.connect(ConnectionParams(host=host, port=port, encoding=encoding or self.config.encoding), self._handle_server_data, self._on_disconnect)
+            await self.connection.connect(ConnectionParams(host=host, port=port, encoding=encoding or self.config.encoding), self._handle_server_data, self._on_disconnect, self._on_gmcp)
             self.state = ConnState.CONNECTED
             self.status = f"connected {host}:{port}"
             self._append_output(f"[Connected to {host}:{port}]")
