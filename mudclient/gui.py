@@ -253,7 +253,9 @@ class MudGui:
             self.queue.put(("out", "[Not connected]"))
 
     async def run_command(self, name: str, args: list[str]) -> None:
-        if name == "quit":
+        if name == "help":
+            self.queue.put(("out", "/connect host port | /disconnect | /reconnect | /quit | /clear | /profiles | /saveprofile name [host port] | /loadprofile name | /deleteprofile name | /set key value | /log start|stop"))
+        elif name == "quit":
             self.on_quit()
         elif name == "disconnect":
             await self.disconnect()
@@ -261,6 +263,8 @@ class MudGui:
             await self.reconnect()
         elif name == "connect" and len(args) >= 2:
             self.host_var.set(args[0]); self.port_var.set(args[1]); await self.connect()
+        elif name == "connect":
+            self.queue.put(("out", "[Usage: /connect host port]"))
         elif name == "clear":
             self.queue.put(("out", "[Cleared]"))
             self.root.after(0, lambda: self.output.delete("1.0", tk.END))
@@ -274,6 +278,8 @@ class MudGui:
                 self.queue.put(("out", "[Invalid port]")); return
             self.profile_store.save_profile(Profile(name=args[0], host=self.host_var.get(), port=port, encoding=self.encoding))
             self.queue.put(("out", f"[Saved profile {args[0]}]"))
+        elif name == "saveprofile":
+            self.queue.put(("out", "[Usage: /saveprofile name]"))
         elif name == "loadprofile" and args:
             p = self.profile_store.get(args[0])
             if not p:
