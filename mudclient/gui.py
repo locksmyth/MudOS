@@ -31,6 +31,7 @@ class MudGui:
         self.port_var = tk.StringVar(value=str(port or ""))
         self.profile_var = tk.StringVar(value=profile or "")
         self.status_var = tk.StringVar(value="disconnected")
+        self.connection_status = "disconnected"
         self.gmcp_connected = False
 
         self.loop = asyncio.new_event_loop()
@@ -82,15 +83,17 @@ class MudGui:
         self.input.bind("<Return>", lambda _e: self.on_enter())
         tk.Button(bottom, text="Send", command=self.on_enter).pack(side=tk.LEFT, padx=5)
 
-        self.status_label = tk.Label(self.root, textvariable=self.status_var, anchor="w")
-        self.status_label.pack(fill=tk.X, padx=8, pady=(0, 8))
+        status_row = tk.Frame(self.root)
+        status_row.pack(fill=tk.X, padx=8, pady=(0, 8), anchor="w")
+        self.status_label = tk.Label(status_row, textvariable=self.status_var, anchor="w")
+        self.status_label.pack(side=tk.LEFT)
 
-        gmcp_row = tk.Frame(self.root)
-        gmcp_row.pack(fill=tk.X, padx=8, pady=(0, 8), anchor="w")
-        tk.Label(gmcp_row, text="GMCP").pack(side=tk.LEFT)
-        self.gmcp_indicator = tk.Canvas(gmcp_row, width=14, height=14, highlightthickness=0, bd=0)
-        self.gmcp_indicator.pack(side=tk.LEFT, padx=(6, 0))
-        self.gmcp_light = self.gmcp_indicator.create_oval(2, 2, 12, 12, fill="#6b6b6b", outline="#4f4f4f")
+        self.gmcp_indicator = tk.Canvas(status_row, width=14, height=14, highlightthickness=0, bd=0)
+        self.gmcp_indicator.pack(side=tk.LEFT, padx=(8, 0))
+        self.gmcp_light = self.gmcp_indicator.create_oval(2, 2, 12, 12, fill="#c0392b", outline="#922b21")
+        self.gmcp_tooltip = tk.Label(status_row, text="", relief=tk.SOLID, borderwidth=1, padx=6, pady=2)
+        self.gmcp_indicator.bind("<Enter>", self._show_gmcp_tooltip)
+        self.gmcp_indicator.bind("<Leave>", self._hide_gmcp_tooltip)
 
         self._apply_theme()
 
@@ -119,15 +122,29 @@ class MudGui:
         self.input.configure(bg=input_bg, fg=input_fg, insertbackground=input_fg)
         self.status_label.configure(bg=bg, fg=fg)
         self.gmcp_indicator.configure(bg=bg)
+        self.gmcp_tooltip.configure(bg=input_bg, fg=input_fg)
+        self._refresh_status_line()
+
+    def _refresh_status_line(self) -> None:
+        self.status_var.set(f"{self.connection_status} | GMCP")
         self._set_gmcp_indicator(self.gmcp_connected)
 
     def _set_gmcp_indicator(self, connected: bool) -> None:
         self.gmcp_connected = connected
-        if connected:
-            fill, outline = "#2ecc71", "#1e8449"
+        if self.connection_status.startswith("disconnected"):
+            fill, outline, tooltip = "#c0392b", "#922b21", "Disconnected"
+        elif connected:
+            fill, outline, tooltip = "#2ecc71", "#1e8449", "Connected (with GMCP)"
         else:
-            fill, outline = "#6b6b6b", "#4f4f4f"
+            fill, outline, tooltip = "#f39c12", "#b9770e", "Connected (no GMCP)"
         self.gmcp_indicator.itemconfig(self.gmcp_light, fill=fill, outline=outline)
+        self.gmcp_tooltip.configure(text=tooltip)
+
+    def _show_gmcp_tooltip(self, _event: tk.Event) -> None:
+        self.gmcp_tooltip.place(in_=self.gmcp_indicator, relx=0.5, rely=0.0, x=0, y=-8, anchor="s")
+
+    def _hide_gmcp_tooltip(self, _event: tk.Event) -> None:
+        self.gmcp_tooltip.place_forget()
 
     def toggle_dark_mode(self) -> None:
         self.dark_mode = not self.dark_mode
@@ -157,7 +174,8 @@ class MudGui:
                     self.output.insert(tk.END, "\n")
                     self.output.see(tk.END)
                 elif kind == "status":
-                    self.status_var.set(text)
+                    self.connection_status = text
+                    self._refresh_status_line()
                 elif kind == "room":
                     self._update_room_description(text)
         except queue.Empty:
